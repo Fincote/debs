@@ -76,13 +76,21 @@ export FINX_DEB_DOMAIN=https://mirror.example.cn/finx/debs
 
 ## 现状
 
-| 包数 | 平台 | 来源 |
-| --- | --- | --- |
-| 51 | darwin24 / arm64 | `Fincote/Finx` 的 Bootstrap CI（`macos-15`） |
-| 48 | darwin21 / x86_64 | 一台真实的 MacBook Air（macOS 12.7.6） |
+**52 个包，两个平台各 52 份，共 104 个 `.deb`。**
 
-`apt`、`apt-dev`、`apt-shlibs` 目前只有 arm64 那一份 —— bootstrap 不装 apt，CI 里是显式装的；
-老 Mac 上要补这三个，跑一次 `finx install apt` 即可。
+| 平台 | 数量 | 来源 |
+| --- | --- | --- |
+| darwin24 / arm64 | 52 | `Fincote/Finx` 的 Bootstrap CI（`macos-15`） |
+| darwin21 / x86_64 | 52 | 一台真实的 MacBook Air（macOS 12.7.6） |
+
+两个平台的构建时间不同步，这是正常的：每次 Bootstrap CI 跑完会刷新 52 个里的
+arm64 那批，而 x86_64 那批只在老 Mac 上手工补。要判断某一份是不是最新，
+看它的 `Revision` —— 不同步时对不上 `10.9-libcxx/<包>.info` 里的版本号。
+
+`tree` 是最后一对补上的：CI 的「Collect the built packages」原本排在
+「Build one package from source」之前，所以装完 `tree` 再也没人去收它 ——
+artifact 里少了它，而整轮是绿的。两处都挪到末尾、并把 `if-no-files-found`
+从 `warn` 改成 `error` 之后才收全。
 
 ## 怎么往里放
 
