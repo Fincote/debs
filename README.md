@@ -96,3 +96,36 @@ gh release create dpkg --repo Fincote/debs --title dpkg --notes-file build.txt \
 # 追加新平台时不要 --clobber
 gh release upload dpkg --repo Fincote/debs dpkg@1.19.7-1.3.darwin23-arm64.deb SHA256SUMS
 ```
+
+## 追加一个平台时，两个坑
+
+**一、`SHA256SUMS` 不会自动合并。** 它是资产，不是仓库文件，`gh release upload` 会撞名。
+而 `gh release upload` 遇到**任一**资产名冲突就把**整批**回滚 —— 报错只说第一个冲突的名字，
+看起来像"只失败了 SHA256SUMS"，实际上 `.deb` 也一个都没进去。
+
+所以顺序必须是「先删旧的 `SHA256SUMS` → 再一次性传 `.deb` + 新 `SHA256SUMS`」，而且删之前
+先把已有那份取下来合并：
+
+```bash
+p=dpkg
+gh release download "$p" --repo Fincote/debs --pattern SHA256SUMS --dir cur --clobber
+(cd cur && cat SHA256SUMS) > /tmp/new.sum
+shasum -a 256 "$p"/*.deb >> /tmp/new.sum
+sort -u /tmp/new.sum > "$p"/SHA256SUMS
+
+# 删旧（见下：要数字 ID）
+id=$(gh api "repos/Fincote/debs/releases/tags/$p" \
+     --jq '.assets[] | select(.name=="SHA256SUMS") | .id')
+gh api -X DELETE "repos/Fincote/debs/releases/assets/$id"
+
+gh release upload "$p" --repo Fincote/debs "$p"/*.deb "$p"/SHA256SUMS
+```
+
+**二、两种 ID 不能混用。** `gh release view --json assets --jq '.assets[].id'` 给的是
+**GraphQL node ID**（`RA_kwDO…`），而 `gh api -X DELETE .../releases/assets/<id>` 要的是
+**数字 ID**。拿 node ID 去删只会得到 `404 Not Found`，且看着像权限问题。要数字 ID 就走
+REST：
+
+```bash
+gh api "repos/Fincote/debs/releases/tags/<tag>" --jq '.assets[] | "\(.id)  \(.name)"'
+```
